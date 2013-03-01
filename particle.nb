@@ -1,0 +1,307 @@
+(* Model G Particle Formation
+   Author: Matt Pulver <matt@blue-science.org> 2010-2013
+
+   This file verifies the mathematics and generates some of the
+   images found in the paper "Dissipative Solitons of Model G"
+   by Matt Pulver and Paul LaViolette published in
+   International Journal of General Systems 42(5) July 2013
+   download PDF from http://starburstfound.org/downloads/physics/model_G.html
+
+   Requirements: Mathematica 9.0
+*)
+
+Clear["Global`*"]
+
+(* Default to 3 spatial dimensions *)
+dimension = ToExpression[Environment["DIMENSION"]];
+If[ dimension == $Failed, dimension = 3 ];
+
+(* Default to 1 seed fluctuation *)
+nseeds = ToExpression[Environment["NSEEDS"]];
+If[ nseeds == $Failed, nseeds = 1 ];
+
+title = "Model G Particle in "<>ToString[dimension]<>"D"
+
+filename = StringReplace[ToLowerCase[title]," "->"_"]
+
+defaultimagesize = { 360, 225 }; (* 360x225 is the default ImageSize *)
+(* imagesize = 2 defaultimagesize; *)
+imagesize = { 1280, 720 }; (* YouTube HD *)
+zoom = imagesize[[1]] / defaultimagesize[[1]];
+
+epsilon = 1/1000000000;
+
+If[ dimension == 1,
+  coors = {x,y,z};
+  chart = "Cartesian";
+  maxstepsize = 0.025;
+  plotrange = If[ nseeds == 1, 1, 1.2 ],
+  If[ dimension == 2,
+    coors = {x,theta,z};
+    chart = "Cylindrical";
+    maxstepsize = 0.015;
+    plotrange = 1.6,
+    If[ dimension == 3,
+      coors = {x,theta,phi};
+      chart = "Spherical";
+      maxstepsize = 0.015;
+      plotrange = 2,
+      Print[ "Invalid dimension=",dimension ]
+    ]
+  ]
+];
+maxstepsize = 0.025;
+maxstepsize = 0.03;
+
+bell[s_,x_] := Exp[-(x/s)^2/2];
+dbell[n_,s_,x_] := Evaluate[D[bell[s,x]/(n-1)!!,{x,n}]];
+bell2d[s_,x_,y_] := Exp[-(x^2+y^2)/s^2/2];
+bell3d[s_,x_,y_,z_] := Exp[-(x^2+y^2+z^2)/s^2/2];
+
+(*
+       A --k1--> G            G --k1m--> A
+       G --k2--> X            X --k2m--> G
+   B + X --k3--> Y + Z    Y + Z --k3m--> B + X
+  2X + Y --k4--> 3X          3X --k4m--> 2X + Y
+       X --k5--> Om          Om --k5m--> X
+*)
+
+(* Equations (4) as expressions equal to 0.
+   ddtdim = d/dt, lapdim = laplacian w.r.t. dimensional lengths,
+   gradim = gradient with w.r.t. dimensional lengths. *)
+eqs4dim = {
+  -ddtdim Gdim + Dg lapdim Gdim - V gradim Gdim - (k1m+k2)Gdim + k2m Xdim + k1 A,
+  -ddtdim Xdim + Dx lapdim Xdim - V gradim Xdim + k2 Gdim - (k2m+k3 B+k5)Xdim + k3m Z Ydim
+     - k4m Xdim^3 + k4 Xdim^2 Ydim + k5m Om,
+  -ddtdim Ydim + Dy lapdim Ydim - V gradim Ydim + k3 B Xdim - k3m Z Ydim
+     + k4m Xdim^3 - k4 Xdim^2 Ydim };
+
+(* Tc, Lc, Cc hold the time, length, and concentration units.
+   G, X, Y are dimensionless Gdim, Xdim, Ydim. *)
+eqs5 = {
+  ddtdim -> ddt / Tc,
+  lapdim -> laplacian / Lc^2,
+  gradim -> grad / Lc,
+  Gdim -> Cc G,
+  Xdim -> Cc X,
+  Ydim -> Cc Y };
+
+(* Apply substitutions from Equation (5) *)
+eqs4dim2 = Collect[eqs4dim /. eqs5, {G, X, Y}, Simplify];
+
+eqs6 = {
+  Tc -> 1/(k2m+k5),
+  Lc -> Sqrt[Dg Tc],
+  Cc -> 1/Sqrt[k4 Tc] };
+
+(* Multiply each equation by Tc/Cc making each term dimensionless,
+   and apply substitions from Equation (6). *)
+eqs4dim3 = Collect[eqs4dim2 Tc/Cc //. eqs6, {G, X, Y, ddt, laplacian, grad},
+  Simplify[#,Assumptions->{0<k4,0<Dg}]&];
+
+eqs7 = {
+  -ddt G +    laplacian G - v grad G - q G +    g  X       + a,
+  -ddt X + dx laplacian X - v grad X + p G - (1+b) X + u Y + w
+     - s X^3 + X^2 Y,
+  -ddt Y + dy laplacian Y - v grad Y       +    b  X - u Y
+     + s X^3 - X^2 Y };
+
+eqs8 = {
+  dx -> Dx/Dg,
+  dy -> Dy/Dg,
+  a -> k1 Sqrt[k4]/(k2m+k5)^(3/2) A,
+  b -> k3/(k2m+k5) B,
+  p -> k2/(k2m+k5),
+  q -> (k1m+k2)/(k2m+k5),
+  g -> k2m/(k2m+k5),
+  s -> k4m/k4,
+  u -> k3m/(k2m+k5) Z,
+  v -> V / Sqrt[Dg(k2m+k5)],
+  w -> Sqrt[k4] k5m/(k2m+k5)^(3/2) Om };
+
+eqs7dim = eqs7 /. eqs8;
+
+(* Verify equivalence of Equations (4) and (7) *)
+Print["Are eqs. (4) equivalent to eqs. (7)?"];
+Simplify[ eqs4dim3 == eqs7dim, Assumptions -> { 0 < Dg, 0 < k2m+k5 } ]
+
+(* This outputs Equations (9) *)
+Print["To return to dimensionalized system:"];
+Simplify[ Last@Solve[ Equal@@@Union[ eqs6, eqs8 ],
+  { Dg, Dx, Dy, A, B, V, Z, Om, k1, k2, k3, k4, k5, k1m, k2m, k3m, k4m, k5m } ],
+  Assumptions -> { 0 < Tc, 0 < Lc } ]
+
+G0 = (   a + g w ) / ( q - g p );
+X0 = ( p a + q w ) / ( q - g p );
+Y0 = ( s X0^2 + b ) X0 / ( X0^2 + u );
+Print[ "Are these homogeneous state values correct?" ];
+Simplify[ {0,0,0} == eqs7 /. { ddt -> 0, laplacian -> 0, grad -> 0,
+    G -> G0, X -> X0, Y -> Y0 } ]
+
+(* Equations (13) *)
+eqs13 = { -ddt pG +   laplacian pG - v grad pG - q pG + g pX,
+  -ddt pX + dx laplacian pX - v grad pX + p pG - (1 + b) pX + u pY -
+     s( (pX+X0)^3 - X0^3 ) + ( (pX+X0)^2(pY+Y0) - X0^2 Y0 ),
+  -ddt pY + dy laplacian pY - v grad pY              + b  pX - u pY +
+     s( (pX+X0)^3 - X0^3 ) - ( (pX+X0)^2(pY+Y0) - X0^2 Y0 ) };
+
+Print[ "Are eqs. (13) equivalent to eqs. (7)?" ];
+Simplify[ eqs13 == eqs7 /. {
+  ddt G -> ddt pG, laplacian G -> laplacian pG, grad G -> grad pG,
+  ddt X -> ddt pX, laplacian X -> laplacian pX, grad X -> grad pX,
+  ddt Y -> ddt pY, laplacian Y -> laplacian pY, grad Y -> grad pY,
+  G -> pG + G0, X -> pX + X0, Y -> pY + Y0 } ]
+
+eqs17 = {a -> 14, b -> 29, dx -> 1, dy -> 12, p -> 1, q -> 1,
+   g -> 1/10, s -> 0, u -> 0, v -> {0,0,0}, w -> 0 };
+
+(* Define chi of Equation (18) *)
+Tseed = 10; (* time when fluctuation is maximum *)
+If[ nseeds == 1,
+  chi[x_,t_] := -bell[1,x] bell[3,t-Tseed],
+  If[ nseeds == 2,
+    chi[x_,t_] := -(bell[1,x+3.303/2]+bell[1,x-3.303/2]) bell[3,t-Tseed],
+    chi[x_,t_] := -(bell[1,x+3.314]+bell[1,x]+bell[1,x-3.314]) bell[3,t-Tseed]
+  ]
+];
+
+L = 100;
+T = 30;
+pdes0 = eqs13 /. {
+  pG -> pG[x,t], pX -> pX[x,t], pY -> pY[x,t],
+  v grad pG -> v.Grad[pG[x,t],coors,chart],
+  v grad pX -> v.Grad[pX[x,t],coors,chart],
+  v grad pY -> v.Grad[pY[x,t],coors,chart],
+  ddt pG -> D[pG[x,t],t], laplacian pG -> Laplacian[pG[x,t],coors,chart],
+  ddt pX -> D[pX[x,t],t], laplacian pX -> Laplacian[pX[x,t],coors,chart],
+  ddt pY -> D[pY[x,t],t], laplacian pY -> Laplacian[pY[x,t],coors,chart] };
+(*Print[ "pdes0 = ",pdes0 ];*)
+pdes1 = Simplify[ pdes0 + { 0, chi[x,t], 0 } /. theta -> Pi/4 ];
+(*Print[ "pdes1 = ",pdes1 ];*)
+pdes2 = Map[ 0==#&, pdes1 ];
+(*Print[ "pdes2 = ",pdes2 ];*)
+
+pdes3 =
+  Join[ pdes2, If[ dimension == 1,
+    {
+      pG[ L/2,t] == 0, pX[ L/2,t] == 0, pY[ L/2,t] == 0,
+      pG[-L/2,t] == 0, pX[-L/2,t] == 0, pY[-L/2,t] == 0,
+      pG[ x  ,0] == 0, pX[ x  ,0] == 0, pY[ x  ,0] == 0
+    (*pG[x,0] == -0.161 bell[0.363,x],
+      pX[x,0] == -8.37 bell[0.272,x],
+      pY[x,0] ==  0.93 bell[0.302,x]*)
+    }, {
+      pG[L/2,t] == 0, pX[L/2,t] == 0, pY[L/2,t] == 0,
+      ( D[pG[r,t],r] /. r->epsilon ) == 0,
+      ( D[pX[r,t],r] /. r->epsilon ) == 0,
+      ( D[pY[r,t],r] /. r->epsilon ) == 0,
+      pG[x  ,0] == 0, pX[x  ,0] == 0, pY[x  ,0] == 0
+      (*
+      pG[x,0] == If[ dimension == 2, -0.308 bell[0.739,x], -0.411 bell[1.14,x] ],
+      pX[x,0] == If[ dimension == 2, -13.6 bell[0.634,x], -14.6 bell[1.04,x] ],
+      pY[x,0] == If[ dimension == 2, 1.5 bell[0.665,x], 1.7 bell[1.07,x] ]
+      *)
+    } ] ] /. eqs17;
+(*Print[ "pdes3 = ",pdes3 ];*)
+
+(* Numerically Solve the PDEs *)
+Print["NDSolve started at ",DateString[]];
+Print["MaxStepSize = ",maxstepsize];
+timestarted = AbsoluteTime[];
+ndsolve = NDSolve[ pdes3, {pG, pX, pY},
+  {x, If[ dimension == 1, -L/2, epsilon ], L/2}, {t, 0, T},
+  MaxStepSize -> maxstepsize, MaxSteps -> 40000 ];
+Print["NDSolve ended at ",DateString[]];
+Print["and took ",AbsoluteTime[]-timestarted," seconds."];
+
+{ pY, pG, pX } = { pY, pG, pX } /. First[ndsolve]
+
+Print[ "Core amplitude:" ];
+Print[ "pY[0,T] = ", pY[0,T] ];
+Print[ "pG[0,T] = ", pG[0,T] ];
+Print[ "pX[0,T] = ", pX[0,T] ];
+
+(* Y, G, X *)
+ylabels = { 2/3, -1/4, -2/3 };
+
+xarrows = If[ nseeds == 1, 0,
+            If[ nseeds == 2, 3.303/2, 3.314 ] ];
+xarrowlen = 3;
+epilogOpacity[t_] := (Erf[t-20]+1)/2;
+epilog[t_] := {
+     { Arrowheads[3/128],
+       Arrow[ { { xarrows+xarrowlen, plotrange ylabels[[1]] },
+                { xarrows+1/4, pY[xarrows+1/4,t] } } ],
+       Text[ Style[Subscript["\[CurlyPhi]", Style["Y",Italic,6 zoom]],10 zoom],
+             { xarrows+xarrowlen, plotrange ylabels[[1]] }, { -1.2, -0.25 } ] },
+     { Arrowheads[3/128],
+       Arrow[ { { xarrows+xarrowlen, plotrange ylabels[[2]] },
+                { xarrows, pG[xarrows,t] } } ],
+       Text[ Subscript[Style["\[CurlyPhi]",10 zoom], Style["G",Italic,6 zoom]],
+             { xarrows+xarrowlen, plotrange ylabels[[2]] }, { -1.2, -0.25 } ] },
+     { Arrowheads[3/128],
+       Arrow[ { { xarrows+xarrowlen, plotrange ylabels[[3]] },
+                { xarrows+1/4, pX[xarrows+1/4,t]/10 } } ],
+       Text[ Subscript[Style["\[CurlyPhi]",10 zoom], Style["X",Italic,6 zoom]]/Style[10,10 zoom],
+             { xarrows+xarrowlen, plotrange ylabels[[3]] }, { -1.2, -0.25 } ] }
+};
+
+Lplot = 25; (* Plot width *)
+frame[t_,plotrange_] := Plot[
+   { pY[If[dimension==1,x,Abs[x]],t],
+     pG[If[dimension==1,x,Abs[x]],t],
+     pX[If[dimension==1,x,Abs[x]],t]/10 },
+   { x, -Lplot/2, Lplot/2 },
+   AspectRatio -> Full,
+   Epilog -> { Opacity[epilogOpacity[t]], epilog[t] },
+   Frame -> True,
+   FrameLabel -> { Style["Space", 10 zoom],
+      Style[ StringForm[ "``, `` and `` Potentials",
+        Style["Y",Italic], Style["G",Italic], Style["X",Italic] ], 10 zoom ] },
+   FrameStyle -> Thick,
+   FrameTicksStyle -> Directive[10 zoom],
+   ImageSize -> imagesize,
+   PerformanceGoal -> "Quality",
+   PlotLabel -> Text[Style[title, 12 zoom]],
+   PlotRange -> plotrange,
+   PlotStyle -> {
+      Directive[AbsoluteThickness[zoom], Darker[Yellow]],
+      Directive[AbsoluteThickness[zoom], Darker[Blue], Dashing[{1/50,1/100}]],
+      Directive[AbsoluteThickness[zoom], Purple, Dashing[1/100]] }
+];
+
+(*
+manipulate = Manipulate[ frame[t], {t,0,T} ]
+Use SWF for a webpage, FLV for YouTube, AVI for Quicktime and Windows.
+*)
+(*
+Export[filename<>".eps", frame[T,plotrange]]
+*)
+(* For generating half-pagewidth diagrams *)
+(*
+Export[filename<>".eps", frame[T,plotrange,{800,500}]]
+If[ dimension == 3,
+  Export[filename<>"_zoomed.eps", frame[T,plotrange/100,{800,500}]]
+]
+*)
+Export[filename<>".eps", frame[T,plotrange]]
+Export[filename<>".png", frame[T,plotrange]]
+
+duration = 10; (* seconds *)
+fps = 16; (* frames per second *)
+frames = Table[frame[t,plotrange], {t, 0, T, T/(duration fps)}];
+Export[filename<>".avi", frames, "FrameRate" -> fps]
+(*
+Export[filename<>".m", frames]
+*)
+
+(* Output snapshots of the seed fluctuation and particle formation *)
+(*
+times = { 0, 7, 8, 9, 10, 11, 12, 13 }
+
+(* For generating half-pagewidth diagrams *)
+Do[
+  Export[ToString[StringForm["``_t=``.eps",filename,t]],Evaluate[frame[t,plotrange]]],
+  { t, times }
+]
+*)
