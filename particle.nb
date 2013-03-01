@@ -2,7 +2,7 @@
    Author: Matt Pulver <matt@blue-science.org> 2010-2013
 
    This file verifies the mathematics and generates some of the
-   images found in the paper "Dissipative Solitons of Model G"
+   images found in the paper "Stationary Dissipative Solitons of Model G"
    by Matt Pulver and Paul LaViolette published in
    International Journal of General Systems 42(5) July 2013
    download PDF from http://starburstfound.org/downloads/physics/model_G.html
